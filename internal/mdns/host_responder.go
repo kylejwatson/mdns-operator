@@ -3,6 +3,7 @@ package mdns
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/netip"
 	"strings"
@@ -75,12 +76,7 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 			}
 		}
 		if targets.unicast {
-			remoteAddr, ok := w.RemoteAddr().(*net.UDPAddr)
-			if !ok {
-				p.log.Error(fmt.Errorf("unexpected remote addr type %T", w.RemoteAddr()), "failed to write unicast mDNS response")
-				return
-			}
-			if _, err := conn.WriteToUDP(raw, remoteAddr); err != nil {
+			if _, err := io.Copy(w, resp); err != nil {
 				p.log.Error(err, "failed to write unicast mDNS response")
 			}
 		}
