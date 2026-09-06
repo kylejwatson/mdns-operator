@@ -21,7 +21,7 @@ spec:
       terminationGracePeriodSeconds: 10
       containers:
         - name: manager
-          image: ghcr.io/kyle/mdns-operator:latest
+          image: ghcr.io/kylejwatson/mdns-operator:latest
           imagePullPolicy: IfNotPresent
           command:
             - /manager

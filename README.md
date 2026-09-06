@@ -37,11 +37,11 @@ docker build -t "$IMG" -f Dockerfile .
 docker push "$IMG"
 ```
 
-If you are using another build system (for example `ko` or `buildx`), publish the final image tag you want in the Deployment manifest.
+If you are using another build system (for example `ko` or `buildx`), publish the final image tag you want and set it in `config/manager/kustomization.yaml`.
 
 ## Deploy to Kubernetes
 
-1. Update the image in `config/manager/manager.yaml` to your published image.
+1. Update the image override in `config/manager/kustomization.yaml` to your published image name and tag.
 2. Install manifests:
 
 ```bash

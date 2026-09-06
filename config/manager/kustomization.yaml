@@ -3,3 +3,8 @@ kind: Kustomization
 
 resources:
   - manager.yaml
+
+images:
+  - name: ghcr.io/kylejwatson/mdns-operator
+    newName: ghcr.io/kylejwatson/mdns-operator
+    newTag: latest

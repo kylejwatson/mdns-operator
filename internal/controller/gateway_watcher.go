@@ -59,10 +59,7 @@ func (g *GatewayWatcher) Start(ctx context.Context) error {
 		}
 
 		attempt++
-		seconds := 1 << min(attempt, 5)
-		if seconds > 30 {
-			seconds = 30
-		}
+		seconds := min(1 << min(attempt, 5), 30)
 		backoff := time.Duration(seconds) * time.Second
 		g.log.Error(err, "watch ended, reconnecting", "backoff", backoff.String())
 
