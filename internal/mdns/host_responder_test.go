@@ -72,4 +72,60 @@ func TestPublisherBuildResponse(t *testing.T) {
 			t.Fatalf("expected no answers for non-local hostname, got %d", len(resp.Answer))
 		}
 	})
+
+	t.Run("qu class question accepted", func(t *testing.T) {
+		msg := new(dns.Msg)
+		dnsutil.SetQuestion(msg, "demo.local.", dns.TypeA)
+		msg.Question[0].Header().Class = dns.ClassINET | 0x8000
+
+		resp := publisher.buildResponse(msg)
+		if len(resp.Answer) != 1 {
+			t.Fatalf("expected 1 answer for QU question, got %d", len(resp.Answer))
+		}
+		if _, ok := resp.Answer[0].(*dns.A); !ok {
+			t.Fatalf("expected A record, got %T", resp.Answer[0])
+		}
+	})
+
+	t.Run("multiple questions can produce multiple answers", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+				&dns.AAAA{Hdr: dns.Header{Name: "demo6.local.", Class: dns.ClassINET}},
+			},
+		}
+
+		resp := publisher.buildResponse(msg)
+		if len(resp.Answer) != 2 {
+			t.Fatalf("expected 2 answers, got %d", len(resp.Answer))
+		}
+		if _, ok := resp.Answer[0].(*dns.A); !ok {
+			t.Fatalf("expected first answer to be A, got %T", resp.Answer[0])
+		}
+		if _, ok := resp.Answer[1].(*dns.AAAA); !ok {
+			t.Fatalf("expected second answer to be AAAA, got %T", resp.Answer[1])
+		}
+	})
+}
+
+func TestAcceptMDNSMessage(t *testing.T) {
+	t.Run("accepts multiple questions", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+				&dns.AAAA{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+			},
+		}
+
+		if got := acceptMDNSMessage(msg); got != dns.MsgAccept {
+			t.Fatalf("expected message acceptance, got %v", got)
+		}
+	})
+
+	t.Run("rejects packets with no questions", func(t *testing.T) {
+		msg := &dns.Msg{}
+		if got := acceptMDNSMessage(msg); got != dns.MsgReject {
+			t.Fatalf("expected message rejection, got %v", got)
+		}
+	})
 }

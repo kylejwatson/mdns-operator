@@ -14,6 +14,8 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
+const mdnsQuestionClassMask = 0x7fff
+
 func (p *Publisher) serveMDNS(ctx context.Context) error {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 5353})
 	if err != nil {
@@ -44,8 +46,14 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 		}
 	}
 
-	server := &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(func(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
+	server := &dns.Server{PacketConn: conn, MsgAcceptFunc: acceptMDNSMessage, Handler: dns.HandlerFunc(func(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
+		if p.debugEnabled() {
+			p.logRequest(w, req)
+		}
 		resp := p.buildResponse(req)
+		if p.debugEnabled() {
+			p.logResponse(w, req, resp)
+		}
 		if len(resp.Answer) == 0 {
 			return
 		}
@@ -65,47 +73,162 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 	return nil
 }
 
+func (p *Publisher) logRequest(w dns.ResponseWriter, req *dns.Msg) {
+	if req == nil {
+		p.log.Info("received mDNS request", "remote", w.RemoteAddr().String(), "local", w.LocalAddr().String(), "questions", 0)
+		return
+	}
+
+	questions := make([]string, 0, len(req.Question))
+	for _, question := range req.Question {
+		questions = append(questions, summarizeQuestion(question))
+	}
+
+	p.log.Info(
+		"received mDNS request",
+		"id", req.ID,
+		"remote", w.RemoteAddr().String(),
+		"local", w.LocalAddr().String(),
+		"questions", len(req.Question),
+		"questionDetails", questions,
+	)
+}
+
+func (p *Publisher) logResponse(w dns.ResponseWriter, req, resp *dns.Msg) {
+	answers := make([]string, 0)
+	if resp != nil {
+		answers = make([]string, 0, len(resp.Answer))
+		for _, answer := range resp.Answer {
+			answers = append(answers, summarizeAnswer(answer))
+		}
+	}
+
+	requestID := uint16(0)
+	if req != nil {
+		requestID = req.ID
+	}
+
+	p.log.Info(
+		"sending mDNS response",
+		"id", requestID,
+		"remote", w.RemoteAddr().String(),
+		"local", w.LocalAddr().String(),
+		"answers", len(answers),
+		"answerDetails", answers,
+	)
+}
+
+func summarizeQuestion(question dns.RR) string {
+	if question == nil {
+		return "<nil>"
+	}
+
+	hdr := question.Header()
+	questionType := dns.RRToType(question)
+	return fmt.Sprintf(
+		"name=%s type=%s class=%d baseClass=%d",
+		hdr.Name,
+		typeName(questionType),
+		hdr.Class,
+		hdr.Class&mdnsQuestionClassMask,
+	)
+}
+
+func summarizeAnswer(answer dns.RR) string {
+	if answer == nil {
+		return "<nil>"
+	}
+
+	hdr := answer.Header()
+	return fmt.Sprintf(
+		"name=%s type=%s class=%d ttl=%d data=%s",
+		hdr.Name,
+		typeName(dns.RRToType(answer)),
+		hdr.Class,
+		hdr.TTL,
+		answer.String(),
+	)
+}
+
+func typeName(rrType uint16) string {
+	if name, ok := dns.TypeToString[rrType]; ok {
+		return name
+	}
+	return fmt.Sprintf("TYPE%d", rrType)
+}
+
+func acceptMDNSMessage(msg *dns.Msg) dns.MsgAcceptAction {
+	if msg.Response {
+		return dns.MsgIgnore
+	}
+	if _, ok := dns.OpcodeToString[msg.Opcode]; !ok {
+		return dns.MsgRejectNotImplemented
+	}
+	if len(msg.Question) == 0 {
+		return dns.MsgReject
+	}
+	for _, question := range msg.Question {
+		if _, ok := question.(*dns.RRSIG); ok {
+			return dns.MsgRejectRefused
+		}
+	}
+	return dns.MsgAccept
+}
+
 func (p *Publisher) buildResponse(req *dns.Msg) *dns.Msg {
 	resp := new(dns.Msg)
 	if req == nil || len(req.Question) == 0 {
 		return resp
 	}
-	if qclass := req.Question[0].Header().Class; qclass != dns.ClassINET {
-		return resp
-	}
-
-	qname := req.Question[0].Header().Name
-	qtype := dns.RRToType(req.Question[0])
-	if qname == "" || qtype != dns.TypeA && qtype != dns.TypeAAAA {
-		return resp
-	}
 
 	resp = dnsutil.SetReply(resp, req)
 	resp.Authoritative = true
-	resp.RecursionAvailable = true
+	resp.RecursionAvailable = false
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for _, state := range p.active {
-		if strings.TrimSuffix(state.hostname, ".") != strings.TrimSuffix(qname, ".") {
+	seen := make(map[string]struct{})
+	for _, question := range req.Question {
+		qclass := question.Header().Class & mdnsQuestionClassMask
+		if qclass != dns.ClassINET {
 			continue
 		}
-		parsed := net.ParseIP(state.ip)
-		if parsed == nil {
+
+		qname := question.Header().Name
+		qtype := dns.RRToType(question)
+		if qname == "" || qtype != dns.TypeA && qtype != dns.TypeAAAA {
 			continue
 		}
-		if qtype == dns.TypeA && parsed.To4() != nil {
-			resp.Answer = append(resp.Answer, &dns.A{
-				Hdr: dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
-				A:   rdata.A{Addr: netip.MustParseAddr(parsed.String())},
-			})
-		}
-		if qtype == dns.TypeAAAA && parsed.To16() != nil && parsed.To4() == nil {
-			resp.Answer = append(resp.Answer, &dns.AAAA{
-				Hdr:  dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
-				AAAA: rdata.AAAA{Addr: netip.MustParseAddr(parsed.String())},
-			})
+
+		for _, state := range p.active {
+			if strings.TrimSuffix(state.hostname, ".") != strings.TrimSuffix(qname, ".") {
+				continue
+			}
+			parsed := net.ParseIP(state.ip)
+			if parsed == nil {
+				continue
+			}
+
+			key := fmt.Sprintf("%s|%d|%s", strings.TrimSuffix(qname, "."), qtype, parsed.String())
+			if _, ok := seen[key]; ok {
+				continue
+			}
+
+			if qtype == dns.TypeA && parsed.To4() != nil {
+				resp.Answer = append(resp.Answer, &dns.A{
+					Hdr: dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
+					A:   rdata.A{Addr: netip.MustParseAddr(parsed.String())},
+				})
+				seen[key] = struct{}{}
+			}
+			if qtype == dns.TypeAAAA && parsed.To16() != nil && parsed.To4() == nil {
+				resp.Answer = append(resp.Answer, &dns.AAAA{
+					Hdr:  dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
+					AAAA: rdata.AAAA{Addr: netip.MustParseAddr(parsed.String())},
+				})
+				seen[key] = struct{}{}
+			}
 		}
 	}
 

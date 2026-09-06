@@ -100,6 +100,17 @@ dns-sd -Q demo-home.local AAAA
 - If service browsing still shows no entries, verify your LAN/firewall allows multicast and that client and node are on the same L2 broadcast domain/VLAN.
 - The operator listens for mDNS traffic in the node network namespace and answers queries from the local multicast domain.
 
+### Enable responder debug logs
+
+Set `MDNS_RESPONDER_DEBUG=true` in `config/manager/kustomization.yaml` to emit request and response details from the mDNS responder, then re-apply the manifests:
+
+```bash
+kubectl apply -k config/default
+kubectl -n mdns-operator-system logs deploy/mdns-operator-controller-manager -f
+```
+
+When enabled, responder logs include remote/local addresses, question count and details, and the answers returned for each request.
+
 ## Uninstall
 
 ```bash

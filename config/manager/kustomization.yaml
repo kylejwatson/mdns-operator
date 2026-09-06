@@ -4,7 +4,15 @@ kind: Kustomization
 resources:
   - manager.yaml
 
+generatorOptions:
+  disableNameSuffixHash: true
+
+configMapGenerator:
+  - name: mdns-operator-config
+    literals:
+      - MDNS_RESPONDER_DEBUG=false
+
 images:
   - name: ghcr.io/kylejwatson/mdns-operator
     newName: ghcr.io/kylejwatson/mdns-operator
-    newTag: sha-346a6de
+    newTag: sha-e5d6d25

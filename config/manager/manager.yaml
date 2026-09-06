@@ -25,6 +25,12 @@ spec:
         - name: manager
           image: ghcr.io/kylejwatson/mdns-operator:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: MDNS_RESPONDER_DEBUG
+              valueFrom:
+                configMapKeyRef:
+                  name: mdns-operator-config
+                  key: MDNS_RESPONDER_DEBUG
           command:
             - /manager
           args:

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
+	"strconv"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -19,14 +21,29 @@ type Publisher struct {
 	active map[string]publishState
 	log    logr.Logger
 	cancel context.CancelFunc
+	debug  bool
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
+	debug := false
+	if value, ok := os.LookupEnv("MDNS_RESPONDER_DEBUG"); ok {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			log.Error(err, "invalid MDNS_RESPONDER_DEBUG value", "value", value)
+		} else {
+			debug = parsed
+		}
+	}
 	log.Info("mDNS will listen on all multicast-capable interfaces")
 	return &Publisher{
 		active: make(map[string]publishState),
 		log:    log,
+		debug:  debug,
 	}
+}
+
+func (p *Publisher) debugEnabled() bool {
+	return p.debug
 }
 
 func (p *Publisher) Start(key, hostname, ip string) error {
