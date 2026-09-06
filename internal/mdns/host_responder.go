@@ -11,18 +11,38 @@ import (
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
 	"codeberg.org/miekg/dns/rdata"
+	"golang.org/x/net/ipv4"
 )
 
-func (p *Publisher) serveMDNS(ctx context.Context, iface net.Interface) error {
-	if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
-		return nil
-	}
-
-	conn, err := net.ListenMulticastUDP("udp4", &iface, &net.UDPAddr{IP: net.IPv4zero, Port: 5353})
+func (p *Publisher) serveMDNS(ctx context.Context) error {
+	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 5353})
 	if err != nil {
-		return fmt.Errorf("listen for mDNS on %s: %w", iface.Name, err)
+		return fmt.Errorf("listen for mDNS: %w", err)
 	}
 	defer conn.Close()
+
+	packetConn := ipv4.NewPacketConn(conn)
+	mcastGroup := &net.UDPAddr{IP: net.ParseIP("224.0.0.251")}
+	if mcastGroup.IP == nil {
+		return fmt.Errorf("invalid mDNS multicast group")
+	}
+
+	ifaces, err := net.Interfaces()
+	if err != nil {
+		return fmt.Errorf("enumerate interfaces for mDNS: %w", err)
+	}
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if err := packetConn.JoinGroup(&iface, mcastGroup); err != nil {
+			p.log.V(1).Info("failed to join mDNS multicast group on interface", "interface", iface.Name, "err", err)
+			continue
+		}
+	}
 
 	server := &dns.Server{PacketConn: conn, Handler: dns.HandlerFunc(func(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
 		resp := p.buildResponse(req)
@@ -30,7 +50,7 @@ func (p *Publisher) serveMDNS(ctx context.Context, iface net.Interface) error {
 			return
 		}
 		if _, err := io.Copy(w, resp); err != nil {
-			p.log.Error(err, "failed to write mDNS response", "interface", iface.Name)
+			p.log.Error(err, "failed to write mDNS response")
 		}
 	})}
 
@@ -40,7 +60,7 @@ func (p *Publisher) serveMDNS(ctx context.Context, iface net.Interface) error {
 	}()
 
 	if err := server.ListenAndServe(); err != nil && ctx.Err() == nil {
-		return fmt.Errorf("listen for mDNS on %s: %w", iface.Name, err)
+		return fmt.Errorf("listen for mDNS: %w", err)
 	}
 	return nil
 }

@@ -15,28 +15,17 @@ type publishState struct {
 }
 
 type Publisher struct {
-	mu         sync.Mutex
-	active     map[string]publishState
-	log        logr.Logger
-	interfaces []net.Interface
-	cancel     context.CancelFunc
+	mu     sync.Mutex
+	active map[string]publishState
+	log    logr.Logger
+	cancel context.CancelFunc
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
-	iface, ok := discoverPublishInterface(log)
-	if !ok {
-		log.Info("mDNS will use the system default interface selection")
-		return &Publisher{
-			active: make(map[string]publishState),
-			log:    log,
-		}
-	}
-
-	log.Info("mDNS publish interface selected", "interface", iface.Name)
+	log.Info("mDNS will listen on all multicast-capable interfaces")
 	return &Publisher{
-		active:     make(map[string]publishState),
-		log:        log,
-		interfaces: []net.Interface{iface},
+		active: make(map[string]publishState),
+		log:    log,
 	}
 }
 
@@ -76,25 +65,11 @@ func (p *Publisher) ensureResponder() error {
 	ctx, cancel := context.WithCancel(context.Background())
 	p.cancel = cancel
 
-	for _, iface := range p.interfaces {
-		go func() {
-			if err := p.serveMDNS(ctx, iface); err != nil && ctx.Err() == nil {
-				p.log.Error(err, "mDNS responder stopped", "interface", iface.Name)
-			}
-		}()
-	}
-	if len(p.interfaces) == 0 {
-		ifaces, err := net.Interfaces()
-		if err == nil {
-			for _, iface := range ifaces {
-				go func() {
-					if err := p.serveMDNS(ctx, iface); err != nil && ctx.Err() == nil {
-						p.log.Error(err, "mDNS responder stopped", "interface", iface.Name)
-					}
-				}()
-			}
+	go func() {
+		if err := p.serveMDNS(ctx); err != nil && ctx.Err() == nil {
+			p.log.Error(err, "mDNS responder stopped")
 		}
-	}
+	}()
 
 	return nil
 }

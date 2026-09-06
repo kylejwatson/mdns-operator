@@ -98,8 +98,7 @@ dns-sd -Q demo-home.local AAAA
 - mDNS is link-local multicast (UDP 5353 to `224.0.0.251` / `ff02::fb`) and is usually not routed across Kubernetes overlay networks.
 - The provided manager manifest enables `hostNetwork: true` so announcements are sent from the node network namespace.
 - If service browsing still shows no entries, verify your LAN/firewall allows multicast and that client and node are on the same L2 broadcast domain/VLAN.
-- The operator logs selected publish interfaces at startup.
-- Optional: set `MDNS_INTERFACE` (comma-separated interface names) on the manager container to force specific interfaces, for example `eth0`.
+- The operator listens for mDNS traffic in the node network namespace and answers queries from the local multicast domain.
 
 ## Uninstall
 

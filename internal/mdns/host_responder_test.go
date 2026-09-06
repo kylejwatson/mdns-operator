@@ -1,42 +1,17 @@
 package mdns
 
 import (
-	"net"
 	"testing"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
+	"github.com/go-logr/logr"
 )
 
-func TestPickBestInterface(t *testing.T) {
-	ifaces := []net.Interface{
-		{Name: "docker0", Index: 1, Flags: net.FlagUp | net.FlagMulticast, HardwareAddr: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}},
-		{Name: "br0", Index: 2, Flags: net.FlagUp | net.FlagMulticast | net.FlagBroadcast, HardwareAddr: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x66}},
-		{Name: "eno1", Index: 3, Flags: net.FlagUp | net.FlagMulticast | net.FlagBroadcast, HardwareAddr: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x77}},
-	}
-
-	got, ok := pickBestInterface(ifaces, 3)
-	if !ok {
-		t.Fatal("expected to choose a usable interface")
-	}
-	if got.Name != "eno1" {
-		t.Fatalf("expected eno1, got %q", got.Name)
-	}
-}
-
-func TestPickBestInterfacePrefersHardwareAndDefaultRoute(t *testing.T) {
-	ifaces := []net.Interface{
-		{Name: "docker0", Index: 1, Flags: net.FlagUp | net.FlagMulticast, HardwareAddr: nil},
-		{Name: "br0", Index: 2, Flags: net.FlagUp | net.FlagMulticast | net.FlagBroadcast, HardwareAddr: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}},
-		{Name: "eno1", Index: 3, Flags: net.FlagUp | net.FlagMulticast | net.FlagBroadcast, HardwareAddr: []byte{0x00, 0x11, 0x22, 0x33, 0x44, 0x66}},
-	}
-
-	got, ok := pickBestInterface(ifaces, 3)
-	if !ok {
-		t.Fatal("expected to choose a usable interface")
-	}
-	if got.Name != "eno1" {
-		t.Fatalf("expected eno1, got %q", got.Name)
+func TestNewPublisherDoesNotPreselectInterface(t *testing.T) {
+	publisher := NewPublisher(logr.Discard())
+	if publisher == nil {
+		t.Fatal("expected publisher instance")
 	}
 }
 

@@ -7,4 +7,4 @@ resources:
 images:
   - name: ghcr.io/kylejwatson/mdns-operator
     newName: ghcr.io/kylejwatson/mdns-operator
-    newTag: sha-69d26f9
+    newTag: sha-346a6de
