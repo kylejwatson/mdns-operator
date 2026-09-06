@@ -149,7 +149,7 @@ func extractStatusIPAddress(object map[string]any) (string, bool) {
 		}
 		addrType, _ := addr["type"].(string)
 		value, _ := addr["value"].(string)
-		if addrType == "IPAddress" && value != "" {
+		if (addrType == "InternalIP" || addrType == "IPAddress") && value != "" {
 			return value, true
 		}
 	}

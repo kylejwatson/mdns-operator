@@ -68,7 +68,7 @@ func TestHandleEventPublishesNodeRecord(t *testing.T) {
 		"status": map[string]any{
 			"addresses": []any{
 				map[string]any{"type": "Hostname", "value": "worker-1"},
-				map[string]any{"type": "IPAddress", "value": "10.0.0.11"},
+					map[string]any{"type": "InternalIP", "value": "10.0.0.11"},
 			},
 		},
 	}}
