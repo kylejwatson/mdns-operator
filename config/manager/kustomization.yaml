@@ -11,8 +11,9 @@ configMapGenerator:
   - name: mdns-operator-config
     literals:
       - MDNS_RESPONDER_DEBUG=true
+      - MDNS_QM_UNICAST_FALLBACK=true
 
 images:
   - name: ghcr.io/kylejwatson/mdns-operator
     newName: ghcr.io/kylejwatson/mdns-operator
-    newTag: sha-e4099e7
+    newTag: sha-280c48b

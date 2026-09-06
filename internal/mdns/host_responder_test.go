@@ -144,7 +144,7 @@ func TestResponseTargets(t *testing.T) {
 			},
 		}
 
-		targets := responseTargets(msg)
+		targets := responseTargets(msg, false)
 		if !targets.unicast || targets.multicast {
 			t.Fatalf("unexpected targets for QU question: %+v", targets)
 		}
@@ -157,7 +157,7 @@ func TestResponseTargets(t *testing.T) {
 			},
 		}
 
-		targets := responseTargets(msg)
+		targets := responseTargets(msg, false)
 		if targets.unicast || !targets.multicast {
 			t.Fatalf("unexpected targets for plain IN question: %+v", targets)
 		}
@@ -171,9 +171,22 @@ func TestResponseTargets(t *testing.T) {
 			},
 		}
 
-		targets := responseTargets(msg)
+		targets := responseTargets(msg, false)
 		if !targets.unicast || !targets.multicast {
 			t.Fatalf("unexpected targets for mixed questions: %+v", targets)
+		}
+	})
+
+	t.Run("qm compatibility mode uses both transports", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+			},
+		}
+
+		targets := responseTargets(msg, true)
+		if !targets.unicast || !targets.multicast {
+			t.Fatalf("unexpected targets for compatibility mode: %+v", targets)
 		}
 	})
 }

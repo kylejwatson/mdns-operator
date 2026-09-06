@@ -111,6 +111,10 @@ kubectl -n mdns-operator-system logs deploy/mdns-operator-controller-manager -f
 
 When enabled, responder logs include remote/local addresses, question count and details, and the answers returned for each request.
 
+### Enable QM compatibility mode
+
+Set `MDNS_QM_UNICAST_FALLBACK=true` in `config/manager/kustomization.yaml` to send both multicast and unicast replies for `QM` questions. This can improve compatibility with devices that issue `QM` queries but do not reliably consume multicast answers.
+
 ## Uninstall
 
 ```bash

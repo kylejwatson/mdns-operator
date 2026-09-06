@@ -61,7 +61,7 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 	}
 
 	server := &dns.Server{PacketConn: conn, MsgAcceptFunc: acceptMDNSMessage, Handler: dns.HandlerFunc(func(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
-		targets := responseTargets(req)
+		targets := responseTargets(req, p.qmUnicastFallbackEnabled())
 		if p.debugEnabled() {
 			p.logRequest(w, req)
 		}
@@ -151,7 +151,7 @@ func (p *Publisher) logResponse(w dns.ResponseWriter, req, resp *dns.Msg, target
 	)
 }
 
-func responseTargets(req *dns.Msg) responseDelivery {
+func responseTargets(req *dns.Msg, qmUnicastFallback bool) responseDelivery {
 	targets := responseDelivery{}
 	if req == nil {
 		return targets
@@ -167,6 +167,9 @@ func responseTargets(req *dns.Msg) responseDelivery {
 			continue
 		}
 		targets.multicast = true
+		if qmUnicastFallback {
+			targets.unicast = true
+		}
 	}
 
 	return targets

@@ -17,11 +17,12 @@ type publishState struct {
 }
 
 type Publisher struct {
-	mu     sync.Mutex
-	active map[string]publishState
-	log    logr.Logger
-	cancel context.CancelFunc
-	debug  bool
+	mu                 sync.Mutex
+	active             map[string]publishState
+	log                logr.Logger
+	cancel             context.CancelFunc
+	debug              bool
+	qmUnicastFallback  bool
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
@@ -34,16 +35,31 @@ func NewPublisher(log logr.Logger) *Publisher {
 			debug = parsed
 		}
 	}
+
+	qmUnicastFallback := false
+	if value, ok := os.LookupEnv("MDNS_QM_UNICAST_FALLBACK"); ok {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			log.Error(err, "invalid MDNS_QM_UNICAST_FALLBACK value", "value", value)
+		} else {
+			qmUnicastFallback = parsed
+		}
+	}
 	log.Info("mDNS will listen on all multicast-capable interfaces")
 	return &Publisher{
-		active: make(map[string]publishState),
-		log:    log,
-		debug:  debug,
+		active:            make(map[string]publishState),
+		log:               log,
+		debug:             debug,
+		qmUnicastFallback: qmUnicastFallback,
 	}
 }
 
 func (p *Publisher) debugEnabled() bool {
 	return p.debug
+}
+
+func (p *Publisher) qmUnicastFallbackEnabled() bool {
+	return p.qmUnicastFallback
 }
 
 func (p *Publisher) Start(key, hostname, ip string) error {
