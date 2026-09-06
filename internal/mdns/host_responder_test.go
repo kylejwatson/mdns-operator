@@ -129,3 +129,45 @@ func TestAcceptMDNSMessage(t *testing.T) {
 		}
 	})
 }
+
+func TestResponseTargets(t *testing.T) {
+	t.Run("qu only uses unicast", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET | 0x8000}},
+			},
+		}
+
+		targets := responseTargets(msg)
+		if !targets.unicast || targets.multicast {
+			t.Fatalf("unexpected targets for QU question: %+v", targets)
+		}
+	})
+
+	t.Run("plain IN uses multicast", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+			},
+		}
+
+		targets := responseTargets(msg)
+		if targets.unicast || !targets.multicast {
+			t.Fatalf("unexpected targets for plain IN question: %+v", targets)
+		}
+	})
+
+	t.Run("mixed questions use both transports", func(t *testing.T) {
+		msg := &dns.Msg{
+			Question: []dns.RR{
+				&dns.A{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET | 0x8000}},
+				&dns.AAAA{Hdr: dns.Header{Name: "demo.local.", Class: dns.ClassINET}},
+			},
+		}
+
+		targets := responseTargets(msg)
+		if !targets.unicast || !targets.multicast {
+			t.Fatalf("unexpected targets for mixed questions: %+v", targets)
+		}
+	})
+}

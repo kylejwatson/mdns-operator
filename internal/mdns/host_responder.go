@@ -3,7 +3,6 @@ package mdns
 import (
 	"context"
 	"fmt"
-	"io"
 	"net"
 	"net/netip"
 	"strings"
@@ -15,6 +14,12 @@ import (
 )
 
 const mdnsQuestionClassMask = 0x7fff
+const mdnsQuestionUnicastResponseBit = 0x8000
+
+type responseDelivery struct {
+	unicast   bool
+	multicast bool
+}
 
 func (p *Publisher) serveMDNS(ctx context.Context) error {
 	conn, err := net.ListenUDP("udp4", &net.UDPAddr{IP: net.IPv4zero, Port: 5353})
@@ -47,18 +52,32 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 	}
 
 	server := &dns.Server{PacketConn: conn, MsgAcceptFunc: acceptMDNSMessage, Handler: dns.HandlerFunc(func(ctx context.Context, w dns.ResponseWriter, req *dns.Msg) {
+		targets := responseTargets(req)
 		if p.debugEnabled() {
 			p.logRequest(w, req)
 		}
 		resp := p.buildResponse(req)
 		if p.debugEnabled() {
-			p.logResponse(w, req, resp)
+			p.logResponse(w, req, resp, targets)
 		}
 		if len(resp.Answer) == 0 {
 			return
 		}
-		if _, err := io.Copy(w, resp); err != nil {
-			p.log.Error(err, "failed to write mDNS response")
+		if err := resp.Pack(); err != nil {
+			p.log.Error(err, "failed to pack mDNS response")
+			return
+		}
+		raw := resp.Data
+
+		if targets.multicast {
+			if _, err := conn.WriteToUDP(raw, mcastGroup); err != nil {
+				p.log.Error(err, "failed to write multicast mDNS response")
+			}
+		}
+		if targets.unicast {
+			if _, err := w.Write(raw); err != nil {
+				p.log.Error(err, "failed to write unicast mDNS response")
+			}
 		}
 	})}
 
@@ -94,7 +113,7 @@ func (p *Publisher) logRequest(w dns.ResponseWriter, req *dns.Msg) {
 	)
 }
 
-func (p *Publisher) logResponse(w dns.ResponseWriter, req, resp *dns.Msg) {
+func (p *Publisher) logResponse(w dns.ResponseWriter, req, resp *dns.Msg, targets responseDelivery) {
 	answers := make([]string, 0)
 	if resp != nil {
 		answers = make([]string, 0, len(resp.Answer))
@@ -114,8 +133,31 @@ func (p *Publisher) logResponse(w dns.ResponseWriter, req, resp *dns.Msg) {
 		"remote", w.RemoteAddr().String(),
 		"local", w.LocalAddr().String(),
 		"answers", len(answers),
+		"deliveryUnicast", targets.unicast,
+		"deliveryMulticast", targets.multicast,
 		"answerDetails", answers,
 	)
+}
+
+func responseTargets(req *dns.Msg) responseDelivery {
+	targets := responseDelivery{}
+	if req == nil {
+		return targets
+	}
+
+	for _, question := range req.Question {
+		class := question.Header().Class
+		if class&mdnsQuestionClassMask != dns.ClassINET {
+			continue
+		}
+		if class&mdnsQuestionUnicastResponseBit != 0 {
+			targets.unicast = true
+			continue
+		}
+		targets.multicast = true
+	}
+
+	return targets
 }
 
 func summarizeQuestion(question dns.RR) string {
