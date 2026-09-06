@@ -5,7 +5,6 @@ import (
 	"net"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/grandcat/zeroconf"
@@ -43,9 +42,7 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if !strings.HasSuffix(hostname, ".local") {
-		hostname += ".local"
-	}
+	hostname = normalizeHostname(hostname)
 
 	if state, ok := p.active[key]; ok {
 		if state.hostname == hostname && state.ip == ip {
@@ -60,43 +57,15 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 		return fmt.Errorf("invalid ip address %q", ip)
 	}
 
-	serverName := hostname
-	if !strings.HasSuffix(serverName, ".") {
-		serverName += "."
+	serverName, instance := serviceIdentityFromHostname(hostname)
+	server, err := registerProxyWithRetry(p.log, hostname, instance, serverName, parsedIP, p.interfaces)
+	if err != nil {
+		return err
 	}
 
-	instance := strings.TrimSuffix(hostname, ".local")
-	instance = strings.TrimSuffix(instance, ".")
-
-	var lastErr error
-	for attempt := 1; attempt <= 5; attempt++ {
-		server, err := zeroconf.RegisterProxy(
-			instance,
-			"_http._tcp",
-			"local.",
-			80,
-			serverName,
-			[]string{parsedIP.String()},
-			nil,
-			p.interfaces,
-		)
-		if err == nil {
-			p.active[key] = publishState{server: server, hostname: hostname, ip: ip}
-			if attempt > 1 {
-				p.log.Info("publish succeeded after retry", "hostname", hostname, "attempt", attempt)
-			}
-			p.log.Info("broadcasting mDNS record", "key", key, "hostname", hostname, "ip", ip)
-			return nil
-		}
-
-		lastErr = err
-		p.log.Error(err, "error publishing mDNS record", "hostname", hostname, "attempt", fmt.Sprintf("%d/5", attempt))
-		if attempt < 5 {
-			time.Sleep(time.Second)
-		}
-	}
-
-	return fmt.Errorf("publish %s failed after retries: %w", hostname, lastErr)
+	p.active[key] = publishState{server: server, hostname: hostname, ip: ip}
+	p.log.Info("broadcasting mDNS record", "key", key, "hostname", hostname, "ip", ip)
+	return nil
 }
 
 func (p *Publisher) Stop(key string) {
