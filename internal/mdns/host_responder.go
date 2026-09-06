@@ -7,6 +7,7 @@ import (
 	"net"
 	"net/netip"
 	"strings"
+	"time"
 
 	"codeberg.org/miekg/dns"
 	"codeberg.org/miekg/dns/dnsutil"
@@ -71,6 +72,9 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 		raw := resp.Data
 
 		if targets.multicast {
+			if err := conn.SetWriteDeadline(time.Now().Add(2 * time.Second)); err != nil {
+				p.log.Error(err, "failed to set multicast mDNS write deadline")
+			}
 			if _, err := conn.WriteToUDP(raw, mcastGroup); err != nil {
 				p.log.Error(err, "failed to write multicast mDNS response")
 			}
