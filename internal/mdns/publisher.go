@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
@@ -24,17 +23,20 @@ type Publisher struct {
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
-	ifaces, ifaceLog := discoverPublishInterfaces(log)
-	if len(ifaceLog) == 0 {
-		log.Info("mDNS will use all usable interfaces")
-	} else {
-		log.Info("mDNS publish interfaces selected", "interfaces", strings.Join(ifaceLog, ","))
+	iface, ok := discoverPublishInterface(log)
+	if !ok {
+		log.Info("mDNS will use the system default interface selection")
+		return &Publisher{
+			active: make(map[string]publishState),
+			log:    log,
+		}
 	}
 
+	log.Info("mDNS publish interface selected", "interface", iface.Name)
 	return &Publisher{
 		active:     make(map[string]publishState),
 		log:        log,
-		interfaces: ifaces,
+		interfaces: []net.Interface{iface},
 	}
 }
 

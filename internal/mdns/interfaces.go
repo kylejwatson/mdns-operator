@@ -8,11 +8,10 @@ import (
 	"github.com/go-logr/logr"
 )
 
-func discoverPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
+func discoverPublishInterface(log logr.Logger) (net.Interface, bool) {
 	requested := strings.TrimSpace(os.Getenv("MDNS_INTERFACE"))
 	if requested == "" {
-		ifaces, names := defaultPublishInterfaces(log)
-		return ifaces, names
+		return defaultPublishInterface(log)
 	}
 
 	names := strings.Split(requested, ",")
@@ -25,18 +24,16 @@ func discoverPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
 	}
 	if len(byName) == 0 {
 		log.Info("MDNS_INTERFACE was set but no valid names were found, using default interface selection")
-		ifaces, selected := defaultPublishInterfaces(log)
-		return ifaces, selected
+		return defaultPublishInterface(log)
 	}
 
 	all, err := net.Interfaces()
 	if err != nil {
 		log.Error(err, "failed to enumerate network interfaces, using mDNS library default")
-		return nil, nil
+		return net.Interface{}, false
 	}
 
 	selected := make([]net.Interface, 0, len(byName))
-	selectedNames := make([]string, 0, len(byName))
 	for _, iface := range all {
 		if _, ok := byName[iface.Name]; !ok {
 			continue
@@ -45,44 +42,83 @@ func discoverPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
 			continue
 		}
 		selected = append(selected, iface)
-		selectedNames = append(selectedNames, iface.Name)
 	}
 
 	if len(selected) == 0 {
 		log.Info("no usable interfaces matched MDNS_INTERFACE, using default interface selection", "requested", requested)
-		ifaces, names := defaultPublishInterfaces(log)
-		return ifaces, names
+		return defaultPublishInterface(log)
 	}
 
-	return selected, selectedNames
+	preferred := resolveDefaultRouteIndex()
+	best, ok := pickBestInterface(selected, preferred)
+	if ok {
+		return best, true
+	}
+	return selected[0], true
 }
 
-func defaultPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
+func defaultPublishInterface(log logr.Logger) (net.Interface, bool) {
 	all, err := net.Interfaces()
 	if err != nil {
 		log.Error(err, "failed to enumerate network interfaces, using mDNS library default")
-		return nil, nil
+		return net.Interface{}, false
 	}
 
-	selected := make([]net.Interface, 0, len(all))
-	selectedNames := make([]string, 0, len(all))
-	for _, iface := range all {
-		if iface.Flags&net.FlagUp == 0 {
-			continue
+	preferred := resolveDefaultRouteIndex()
+	best, ok := pickBestInterface(all, preferred)
+	if !ok {
+		return net.Interface{}, false
+	}
+
+	log.Info("selected LAN-facing interface for mDNS", "interface", best.Name)
+	return best, true
+}
+
+func pickBestInterface(ifaces []net.Interface, defaultRouteIndex int) (net.Interface, bool) {
+	if defaultRouteIndex > 0 {
+		for _, iface := range ifaces {
+			if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+				continue
+			}
+			if iface.Flags&net.FlagLoopback != 0 {
+				continue
+			}
+			if len(iface.HardwareAddr) == 0 {
+				continue
+			}
+			if iface.Index == defaultRouteIndex {
+				return iface, true
+			}
 		}
-		if iface.Flags&net.FlagMulticast == 0 {
+	}
+
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
 			continue
 		}
 		if iface.Flags&net.FlagLoopback != 0 {
 			continue
 		}
-		selected = append(selected, iface)
-		selectedNames = append(selectedNames, iface.Name)
+		if len(iface.HardwareAddr) == 0 {
+			continue
+		}
+		if iface.Flags&net.FlagBroadcast != 0 {
+			return iface, true
+		}
 	}
 
-	if len(selected) == 0 {
-		return nil, nil
+	for _, iface := range ifaces {
+		if iface.Flags&net.FlagUp == 0 || iface.Flags&net.FlagMulticast == 0 {
+			continue
+		}
+		if iface.Flags&net.FlagLoopback != 0 {
+			continue
+		}
+		if len(iface.HardwareAddr) == 0 {
+			continue
+		}
+		return iface, true
 	}
 
-	return selected, selectedNames
+	return net.Interface{}, false
 }
