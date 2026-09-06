@@ -8,7 +8,7 @@ This operator makes it easier to set up local domain names for services on a pri
 - Reads `mdns.alpha.kubernetes.io/hostname` annotation.
 - Reads `status.addresses` for the first `IPAddress` value.
 - Publishes or withdraws `.local` hostname records for the Gateway IP.
-- Answers hostname `A` and `AAAA` queries directly over mDNS multicast.
+- Registers mDNS/DNS-SD records via `github.com/brutella/dnssd`, including hostname `A`/`AAAA` responses for published services.
 
 If the annotation is removed, the Gateway is deleted, or there is no `IPAddress` status address, the mDNS record is unpublished.
 
@@ -16,7 +16,7 @@ If the annotation is removed, the Gateway is deleted, or there is no `IPAddress`
 
 - `cmd/mdns-operator/main.go`: manager startup, health probes, leader election.
 - `internal/controller/gateway_watcher.go`: Gateway watch loop and object parsing.
-- `internal/mdns/publisher.go`: mDNS publish/unpublish lifecycle with retries.
+- `internal/mdns/publisher.go`: mDNS publish/unpublish lifecycle backed by `github.com/brutella/dnssd`.
 - `config/default`: top-level kustomize entrypoint for installation.
 - `config/rbac`: ServiceAccount, ClusterRole, ClusterRoleBinding.
 - `config/manager`: controller Deployment.
@@ -102,18 +102,14 @@ dns-sd -Q demo-home.local AAAA
 
 ### Enable responder debug logs
 
-Set `MDNS_RESPONDER_DEBUG=true` in `config/manager/kustomization.yaml` to emit request and response details from the mDNS responder, then re-apply the manifests:
+Set `MDNS_RESPONDER_DEBUG=true` in `config/manager/kustomization.yaml` to enable verbose logs from the `dnssd` responder library, then re-apply the manifests:
 
 ```bash
 kubectl apply -k config/default
 kubectl -n mdns-operator-system logs deploy/mdns-operator-controller-manager -f
 ```
 
-When enabled, responder logs include remote/local addresses, question count and details, and the answers returned for each request.
-
-### Enable QM compatibility mode
-
-Set `MDNS_QM_UNICAST_FALLBACK=true` in `config/manager/kustomization.yaml` to send both multicast and unicast replies for `QM` questions. This can improve compatibility with devices that issue `QM` queries but do not reliably consume multicast answers.
+When enabled, responder logs include additional protocol-level details emitted by the library.
 
 ## Uninstall
 

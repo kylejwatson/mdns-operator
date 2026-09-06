@@ -31,11 +31,6 @@ spec:
                 configMapKeyRef:
                   name: mdns-operator-config
                   key: MDNS_RESPONDER_DEBUG
-            - name: MDNS_QM_UNICAST_FALLBACK
-              valueFrom:
-                configMapKeyRef:
-                  name: mdns-operator-config
-                  key: MDNS_QM_UNICAST_FALLBACK
           command:
             - /manager
           args:
