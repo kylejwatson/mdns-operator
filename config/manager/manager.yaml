@@ -17,6 +17,8 @@ spec:
         app.kubernetes.io/name: mdns-operator
         app.kubernetes.io/component: controller
     spec:
+      hostNetwork: true
+      dnsPolicy: ClusterFirstWithHostNet
       serviceAccountName: mdns-operator-controller-manager
       terminationGracePeriodSeconds: 10
       containers:

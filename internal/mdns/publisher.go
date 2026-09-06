@@ -18,15 +18,24 @@ type publishState struct {
 }
 
 type Publisher struct {
-	mu     sync.Mutex
-	active map[string]publishState
-	log    logr.Logger
+	mu         sync.Mutex
+	active     map[string]publishState
+	log        logr.Logger
+	interfaces []net.Interface
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
+	ifaces, ifaceLog := discoverPublishInterfaces(log)
+	if len(ifaceLog) == 0 {
+		log.Info("mDNS will use all interfaces selected by zeroconf")
+	} else {
+		log.Info("mDNS publish interfaces selected", "interfaces", strings.Join(ifaceLog, ","))
+	}
+
 	return &Publisher{
-		active: make(map[string]publishState),
-		log:    log,
+		active:     make(map[string]publishState),
+		log:        log,
+		interfaces: ifaces,
 	}
 }
 
@@ -69,7 +78,7 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 			serverName,
 			[]string{parsedIP.String()},
 			nil,
-			nil,
+			p.interfaces,
 		)
 		if err == nil {
 			p.active[key] = publishState{server: server, hostname: hostname, ip: ip}
