@@ -13,6 +13,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/kyle/mdns-operator/internal/controller"
+	"github.com/kyle/mdns-operator/internal/mdns"
 )
 
 func main() {
@@ -57,13 +58,25 @@ func main() {
 		os.Exit(1)
 	}
 
-	gatewayWatcher, err := controller.NewGatewayWatcher(cfg, ctrl.Log.WithName("gateway-watcher"))
+	publisher := mdns.NewPublisher(ctrl.Log.WithName("mdns"))
+
+	gatewayWatcher, err := controller.NewGatewayWatcher(cfg, publisher, ctrl.Log.WithName("gateway-watcher"))
 	if err != nil {
 		ctrl.Log.WithName("setup").Error(err, "unable to construct gateway watcher")
 		os.Exit(1)
 	}
 	if err := mgr.Add(gatewayWatcher); err != nil {
 		ctrl.Log.WithName("setup").Error(err, "unable to add gateway watcher")
+		os.Exit(1)
+	}
+
+	nodeWatcher, err := controller.NewNodeWatcher(cfg, publisher, ctrl.Log.WithName("node-watcher"))
+	if err != nil {
+		ctrl.Log.WithName("setup").Error(err, "unable to construct node watcher")
+		os.Exit(1)
+	}
+	if err := mgr.Add(nodeWatcher); err != nil {
+		ctrl.Log.WithName("setup").Error(err, "unable to add node watcher")
 		os.Exit(1)
 	}
 

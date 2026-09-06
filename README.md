@@ -5,12 +5,13 @@ This operator makes it easier to set up local domain names for services on a pri
 ## What it does
 
 - Watches all `Gateway` resources in `gateway.networking.k8s.io/v1`.
+- Watches `Node` resources for the same `mdns.alpha.kubernetes.io/hostname` annotation.
 - Reads `mdns.alpha.kubernetes.io/hostname` annotation.
 - Reads `status.addresses` for the first `IPAddress` value.
-- Publishes or withdraws `.local` hostname records for the Gateway IP.
+- Publishes or withdraws `.local` hostname records for Gateway and Node IPs.
 - Registers mDNS/DNS-SD records via `github.com/brutella/dnssd`, including hostname `A`/`AAAA` responses for published services.
 
-If the annotation is removed, the Gateway is deleted, or there is no `IPAddress` status address, the mDNS record is unpublished.
+If the annotation is removed, the object is deleted, or there is no `IPAddress` status address, the mDNS record is unpublished.
 
 ## Project layout
 
@@ -83,6 +84,21 @@ Notes:
 
 - The operator only publishes once `status.addresses` contains an entry with `type: IPAddress`.
 - The hostname is normalized to end in `.local` if it does not already.
+
+## Example Node with mDNS annotation
+
+Apply the same hostname annotation to a Node to publish its `.local` name:
+
+```yaml
+apiVersion: v1
+kind: Node
+metadata:
+	name: worker-1
+	annotations:
+		mdns.alpha.kubernetes.io/hostname: worker-1.local
+```
+
+The controller uses the first `status.addresses` entry with `type: IPAddress` and publishes that IP under the node hostname.
 
 ## Verify published records
 
