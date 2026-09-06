@@ -34,6 +34,9 @@ func TestPublisherBuildResponse(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected A record, got %T", resp.Answer[0])
 		}
+			if got, want := answer.Header().Class, uint16(dns.ClassINET|0x8000); got != want {
+				t.Fatalf("A class mismatch: got %d want %d", got, want)
+			}
 		if got, want := answer.A.String(), "10.0.0.42"; got != want {
 			t.Fatalf("A record mismatch: got %q want %q", got, want)
 		}
@@ -50,6 +53,9 @@ func TestPublisherBuildResponse(t *testing.T) {
 		if !ok {
 			t.Fatalf("expected AAAA record, got %T", resp.Answer[0])
 		}
+			if got, want := answer.Header().Class, uint16(dns.ClassINET|0x8000); got != want {
+				t.Fatalf("AAAA class mismatch: got %d want %d", got, want)
+			}
 		if got, want := answer.AAAA.String(), "2001:db8::42"; got != want {
 			t.Fatalf("AAAA record mismatch: got %q want %q", got, want)
 		}

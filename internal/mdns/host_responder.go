@@ -17,6 +17,7 @@ import (
 
 const mdnsQuestionClassMask = 0x7fff
 const mdnsQuestionUnicastResponseBit = 0x8000
+const mdnsAnswerCacheFlushBit = 0x8000
 
 type responseDelivery struct {
 	unicast   bool
@@ -34,6 +35,12 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 	mcastGroup := &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: 5353}
 	if mcastGroup.IP == nil {
 		return fmt.Errorf("invalid mDNS multicast group")
+	}
+	if err := packetConn.SetTTL(255); err != nil {
+		return fmt.Errorf("set mDNS unicast ttl: %w", err)
+	}
+	if err := packetConn.SetMulticastTTL(255); err != nil {
+		return fmt.Errorf("set mDNS multicast ttl: %w", err)
 	}
 
 	ifaces, err := net.Interfaces()
@@ -264,14 +271,14 @@ func (p *Publisher) buildResponse(req *dns.Msg) *dns.Msg {
 
 			if qtype == dns.TypeA && parsed.To4() != nil {
 				resp.Answer = append(resp.Answer, &dns.A{
-					Hdr: dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
+					Hdr: dns.Header{Name: qname, Class: dns.ClassINET | mdnsAnswerCacheFlushBit, TTL: 120},
 					A:   rdata.A{Addr: netip.MustParseAddr(parsed.String())},
 				})
 				seen[key] = struct{}{}
 			}
 			if qtype == dns.TypeAAAA && parsed.To16() != nil && parsed.To4() == nil {
 				resp.Answer = append(resp.Answer, &dns.AAAA{
-					Hdr:  dns.Header{Name: qname, Class: dns.ClassINET, TTL: 120},
+					Hdr:  dns.Header{Name: qname, Class: dns.ClassINET | mdnsAnswerCacheFlushBit, TTL: 120},
 					AAAA: rdata.AAAA{Addr: netip.MustParseAddr(parsed.String())},
 				})
 				seen[key] = struct{}{}
