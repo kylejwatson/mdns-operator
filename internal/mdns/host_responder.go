@@ -75,7 +75,12 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 			}
 		}
 		if targets.unicast {
-			if _, err := w.Write(raw); err != nil {
+			remoteAddr, ok := w.RemoteAddr().(*net.UDPAddr)
+			if !ok {
+				p.log.Error(fmt.Errorf("unexpected remote addr type %T", w.RemoteAddr()), "failed to write unicast mDNS response")
+				return
+			}
+			if _, err := conn.WriteToUDP(raw, remoteAddr); err != nil {
 				p.log.Error(err, "failed to write unicast mDNS response")
 			}
 		}
