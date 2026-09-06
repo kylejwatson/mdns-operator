@@ -29,7 +29,7 @@ func (p *Publisher) serveMDNS(ctx context.Context) error {
 	defer conn.Close()
 
 	packetConn := ipv4.NewPacketConn(conn)
-	mcastGroup := &net.UDPAddr{IP: net.ParseIP("224.0.0.251")}
+	mcastGroup := &net.UDPAddr{IP: net.ParseIP("224.0.0.251"), Port: 5353}
 	if mcastGroup.IP == nil {
 		return fmt.Errorf("invalid mDNS multicast group")
 	}
