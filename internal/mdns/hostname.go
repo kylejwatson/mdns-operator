@@ -9,13 +9,9 @@ func normalizeHostname(hostname string) string {
 	return hostname
 }
 
-func serviceIdentityFromHostname(hostname string) (serverName string, instance string) {
-	serverName = hostname
-	if !strings.HasSuffix(serverName, ".") {
-		serverName += "."
-	}
-
-	instance = strings.TrimSuffix(hostname, ".local")
-	instance = strings.TrimSuffix(instance, ".")
-	return serverName, instance
+func serviceIdentityFromHostname(hostname string) (host string, instance string) {
+	host = strings.TrimSuffix(hostname, ".local")
+	host = strings.TrimSuffix(host, ".")
+	instance = host
+	return host, instance
 }

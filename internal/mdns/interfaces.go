@@ -31,7 +31,7 @@ func discoverPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
 
 	all, err := net.Interfaces()
 	if err != nil {
-		log.Error(err, "failed to enumerate network interfaces, using zeroconf default")
+		log.Error(err, "failed to enumerate network interfaces, using mDNS library default")
 		return nil, nil
 	}
 
@@ -60,7 +60,7 @@ func discoverPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
 func defaultPublishInterfaces(log logr.Logger) ([]net.Interface, []string) {
 	all, err := net.Interfaces()
 	if err != nil {
-		log.Error(err, "failed to enumerate network interfaces, using zeroconf default")
+		log.Error(err, "failed to enumerate network interfaces, using mDNS library default")
 		return nil, nil
 	}
 

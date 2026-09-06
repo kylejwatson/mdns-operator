@@ -7,7 +7,8 @@ This operator makes it easier to set up local domain names for services on a pri
 - Watches all `Gateway` resources in `gateway.networking.k8s.io/v1`.
 - Reads `mdns.alpha.kubernetes.io/hostname` annotation.
 - Reads `status.addresses` for the first `IPAddress` value.
-- Publishes or withdraws mDNS `_http._tcp` records for the hostname.
+- Publishes or withdraws `.local` hostname records for the Gateway IP.
+- Answers hostname `A` and `AAAA` queries directly over mDNS multicast.
 
 If the annotation is removed, the Gateway is deleted, or there is no `IPAddress` status address, the mDNS record is unpublished.
 
@@ -85,11 +86,11 @@ Notes:
 
 ## Verify published records
 
-After the Gateway controller assigns an IP to `status.addresses`, check that mDNS is discoverable on your LAN:
+After the Gateway controller assigns an IP to `status.addresses`, confirm the node answers direct hostname lookups on your LAN:
 
 ```bash
-dns-sd -B _http._tcp local
-dns-sd -L demo-home _http._tcp local
+dns-sd -Q demo-home.local A
+dns-sd -Q demo-home.local AAAA
 ```
 
 ## Troubleshooting mDNS visibility

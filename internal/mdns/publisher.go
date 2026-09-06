@@ -1,17 +1,16 @@
 package mdns
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
 	"sync"
 
 	"github.com/go-logr/logr"
-	"github.com/grandcat/zeroconf"
 )
 
 type publishState struct {
-	server   *zeroconf.Server
 	hostname string
 	ip       string
 }
@@ -21,12 +20,13 @@ type Publisher struct {
 	active     map[string]publishState
 	log        logr.Logger
 	interfaces []net.Interface
+	cancel     context.CancelFunc
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
 	ifaces, ifaceLog := discoverPublishInterfaces(log)
 	if len(ifaceLog) == 0 {
-		log.Info("mDNS will use all interfaces selected by zeroconf")
+		log.Info("mDNS will use all usable interfaces")
 	} else {
 		log.Info("mDNS publish interfaces selected", "interfaces", strings.Join(ifaceLog, ","))
 	}
@@ -48,7 +48,6 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 		if state.hostname == hostname && state.ip == ip {
 			return nil
 		}
-		state.server.Shutdown()
 		delete(p.active, key)
 	}
 
@@ -56,15 +55,45 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 	if parsedIP == nil {
 		return fmt.Errorf("invalid ip address %q", ip)
 	}
+	_ = parsedIP
 
-	serverName, instance := serviceIdentityFromHostname(hostname)
-	server, err := registerProxyWithRetry(p.log, hostname, instance, serverName, parsedIP, p.interfaces)
-	if err != nil {
+	if err := p.ensureResponder(); err != nil {
 		return err
 	}
 
-	p.active[key] = publishState{server: server, hostname: hostname, ip: ip}
+	p.active[key] = publishState{hostname: hostname, ip: ip}
 	p.log.Info("broadcasting mDNS record", "key", key, "hostname", hostname, "ip", ip)
+	return nil
+}
+
+func (p *Publisher) ensureResponder() error {
+	if p.cancel != nil {
+		return nil
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	p.cancel = cancel
+
+	for _, iface := range p.interfaces {
+		go func() {
+			if err := p.serveMDNS(ctx, iface); err != nil && ctx.Err() == nil {
+				p.log.Error(err, "mDNS responder stopped", "interface", iface.Name)
+			}
+		}()
+	}
+	if len(p.interfaces) == 0 {
+		ifaces, err := net.Interfaces()
+		if err == nil {
+			for _, iface := range ifaces {
+				go func() {
+					if err := p.serveMDNS(ctx, iface); err != nil && ctx.Err() == nil {
+						p.log.Error(err, "mDNS responder stopped", "interface", iface.Name)
+					}
+				}()
+			}
+		}
+	}
+
 	return nil
 }
 
@@ -76,17 +105,23 @@ func (p *Publisher) Stop(key string) {
 	if !ok {
 		return
 	}
-	state.server.Shutdown()
 	delete(p.active, key)
 	p.log.Info("unregistered mDNS record", "key", key, "hostname", state.hostname)
+	if len(p.active) == 0 && p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
+	}
 }
 
 func (p *Publisher) ShutdownAll() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	for key, state := range p.active {
-		state.server.Shutdown()
+	for key := range p.active {
 		delete(p.active, key)
+	}
+	if p.cancel != nil {
+		p.cancel()
+		p.cancel = nil
 	}
 }
