@@ -1,0 +1,32 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: mdns-operator-manager-role
+rules:
+  - apiGroups:
+      - gateway.networking.k8s.io
+    resources:
+      - gateways
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - coordination.k8s.io
+    resources:
+      - leases
+    verbs:
+      - create
+      - get
+      - list
+      - update
+      - patch
+      - delete
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+      - update
