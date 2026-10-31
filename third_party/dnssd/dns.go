@@ -103,7 +103,7 @@ func NSEC(rr dns.RR, srv Service, iface *net.Interface) *dns.NSEC {
 		if includesIPv4(ips) {
 			types = append(types, dns.TypeA)
 		}
-		if includesIPv6(ips) {
+		if includesIPv6(ips) || (srv.MappedAAAA && includesIPv4(ips)) {
 			types = append(types, dns.TypeAAAA)
 		}
 
@@ -170,7 +170,7 @@ func AAAA(srv Service, iface *net.Interface) []*dns.AAAA {
 
 	var aaaas []*dns.AAAA
 	for _, ip := range ips {
-		if ip.To4() == nil && ip.To16() != nil {
+		if (ip.To4() == nil || srv.MappedAAAA) && ip.To16() != nil {
 			aaaa := &dns.AAAA{
 				Hdr: dns.RR_Header{
 					Name:   srv.Hostname(),
@@ -178,7 +178,7 @@ func AAAA(srv Service, iface *net.Interface) []*dns.AAAA {
 					Class:  dns.ClassINET,
 					Ttl:    TTLHostname,
 				},
-				AAAA: ip,
+				AAAA: ip.To16(),
 			}
 			aaaas = append(aaaas, aaaa)
 		}

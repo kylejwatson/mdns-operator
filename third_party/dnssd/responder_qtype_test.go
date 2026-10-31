@@ -24,6 +24,11 @@ func (c *captureConn) Close()                               {}
 func hostnameReply(t *testing.T, qname string, qtype uint16, ips ...string) *dns.Msg {
 	t.Helper()
 	cfg := Config{Name: "k8s", Type: "_http._tcp", Domain: "local", Host: "k8s", Port: 80}
+	return replyFor(t, cfg, qname, qtype, ips...)
+}
+
+func replyFor(t *testing.T, cfg Config, qname string, qtype uint16, ips ...string) *dns.Msg {
+	t.Helper()
 	for _, ip := range ips {
 		cfg.IPs = append(cfg.IPs, net.ParseIP(ip))
 	}
@@ -114,5 +119,35 @@ func TestHostnameANYQueryAnswersWithAllAddresses(t *testing.T) {
 
 	if len(msg.Answer) != 2 {
 		t.Fatalf("got %v, want A and AAAA", msg.Answer)
+	}
+}
+
+func TestMappedAAAAAnswersWithMappedAddress(t *testing.T) {
+	cfg := Config{Name: "k8s", Type: "_http._tcp", Domain: "local", Host: "k8s", Port: 80, MappedAAAA: true}
+	msg := replyFor(t, cfg, "k8s.local.", dns.TypeAAAA, "192.168.69.51")
+
+	aaaa := onlyType[*dns.AAAA](t, "answer", msg.Answer)
+	if got, want := aaaa.AAAA.To16(), net.ParseIP("::ffff:192.168.69.51"); !got.Equal(want) {
+		t.Fatalf("got %v want %v", got, want)
+	}
+	if len(msg.Extra) != 2 {
+		t.Fatalf("additional: got %v, want A and NSEC", msg.Extra)
+	}
+	if _, ok := msg.Extra[0].(*dns.A); !ok {
+		t.Fatalf("additional: got %T first", msg.Extra[0])
+	}
+	nsec, ok := msg.Extra[1].(*dns.NSEC)
+	if !ok || len(nsec.TypeBitMap) != 2 {
+		t.Fatalf("additional: got %v, want NSEC for A and AAAA", msg.Extra[1])
+	}
+}
+
+func TestMappedAAAAKeepsAQueryAnswer(t *testing.T) {
+	cfg := Config{Name: "k8s", Type: "_http._tcp", Domain: "local", Host: "k8s", Port: 80, MappedAAAA: true}
+	msg := replyFor(t, cfg, "k8s.local.", dns.TypeA, "192.168.69.51")
+
+	a := onlyType[*dns.A](t, "answer", msg.Answer)
+	if a.A.String() != "192.168.69.51" {
+		t.Fatalf("got %v", a.A)
 	}
 }

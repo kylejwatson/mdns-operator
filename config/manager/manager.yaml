@@ -31,6 +31,8 @@ spec:
                 configMapKeyRef:
                   name: mdns-operator-config
                   key: MDNS_RESPONDER_DEBUG
+            - name: MDNS_MAPPED_AAAA
+              value: "true"
           command:
             - /manager
           args:

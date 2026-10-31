@@ -27,6 +27,9 @@ type Publisher struct {
 	cancel    context.CancelFunc
 	responder dnssd.Responder
 	debug     bool
+	// mappedAAAA also answers AAAA queries with the IPv4-mapped address, for
+	// clients which stall on .local names without an AAAA record.
+	mappedAAAA bool
 }
 
 func NewPublisher(log logr.Logger) *Publisher {
@@ -42,11 +45,21 @@ func NewPublisher(log logr.Logger) *Publisher {
 	if debug {
 		dnssdlog.Debug.Enable()
 	}
-	log.Info("mDNS will announce records using dnssd responder")
+	mappedAAAA := false
+	if value, ok := os.LookupEnv("MDNS_MAPPED_AAAA"); ok {
+		parsed, err := strconv.ParseBool(value)
+		if err != nil {
+			log.Error(err, "invalid MDNS_MAPPED_AAAA value", "value", value)
+		} else {
+			mappedAAAA = parsed
+		}
+	}
+	log.Info("mDNS will announce records using dnssd responder", "mappedAAAA", mappedAAAA)
 	return &Publisher{
-		active: make(map[string]publishState),
-		log:    log,
-		debug:  debug,
+		active:     make(map[string]publishState),
+		log:        log,
+		debug:      debug,
+		mappedAAAA: mappedAAAA,
 	}
 }
 
@@ -73,7 +86,7 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 		return err
 	}
 
-	service, err := buildService(hostname, parsedIP)
+	service, err := buildService(hostname, parsedIP, p.mappedAAAA)
 	if err != nil {
 		return err
 	}
@@ -88,16 +101,16 @@ func (p *Publisher) Start(key, hostname, ip string) error {
 	return nil
 }
 
-
-func buildService(hostname string, ip net.IP) (dnssd.Service, error) {
+func buildService(hostname string, ip net.IP, mappedAAAA bool) (dnssd.Service, error) {
 	host, instance := serviceIdentityFromHostname(hostname)
 	return dnssd.NewService(dnssd.Config{
-		Name:   instance,
-		Type:   "_http._tcp",
-		Domain: "local",
-		Host:   host,
-		IPs:    []net.IP{ip},
-		Port:   80,
+		Name:       instance,
+		Type:       "_http._tcp",
+		Domain:     "local",
+		Host:       host,
+		IPs:        []net.IP{ip},
+		Port:       80,
+		MappedAAAA: mappedAAAA,
 	})
 }
 
@@ -122,7 +135,6 @@ func (p *Publisher) ensureResponderLocked() error {
 
 	return nil
 }
-
 
 func (p *Publisher) removeRegisteredLocked(state publishState) {
 	if p.responder != nil && state.handle != nil {

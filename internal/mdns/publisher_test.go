@@ -11,7 +11,7 @@ func TestBuildService(t *testing.T) {
 		t.Fatal("failed to parse test ip")
 	}
 
-	svc, err := buildService("k8s.local", ip)
+	svc, err := buildService("k8s.local", ip, false)
 	if err != nil {
 		t.Fatalf("buildService returned error: %v", err)
 	}

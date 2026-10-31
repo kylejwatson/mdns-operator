@@ -39,6 +39,10 @@ type Config struct {
 
 	// Interfaces at which the service should be registered
 	Ifaces []string
+
+	// MappedAAAA publishes each IPv4 address as an IPv4-mapped AAAA record
+	// too, for clients which stall until they get an AAAA record.
+	MappedAAAA bool
 }
 
 func (c Config) Copy() Config {
@@ -109,6 +113,9 @@ type Service struct {
 	IPs    []net.IP
 	Ifaces []string
 
+	// MappedAAAA publishes IPv4 addresses as IPv4-mapped AAAA records too.
+	MappedAAAA bool
+
 	// stores ips by interface name for caching purposes
 	ifaceIPs   map[string][]net.IP
 	expiration time.Time
@@ -162,15 +169,16 @@ func NewService(cfg Config) (s Service, err error) {
 	}
 
 	return Service{
-		Name:     trimServiceNameSuffixRight(name),
-		Type:     typ,
-		Domain:   domain,
-		Host:     validHostname(host),
-		Text:     text,
-		Port:     port,
-		IPs:      ips,
-		Ifaces:   ifaces,
-		ifaceIPs: map[string][]net.IP{},
+		Name:       trimServiceNameSuffixRight(name),
+		Type:       typ,
+		Domain:     domain,
+		Host:       validHostname(host),
+		Text:       text,
+		Port:       port,
+		IPs:        ips,
+		Ifaces:     ifaces,
+		MappedAAAA: cfg.MappedAAAA,
+		ifaceIPs:   map[string][]net.IP{},
 	}, nil
 }
 
@@ -265,6 +273,7 @@ func (s Service) Copy() *Service {
 		IPs:        s.IPs,
 		Port:       s.Port,
 		Ifaces:     s.Ifaces,
+		MappedAAAA: s.MappedAAAA,
 		ifaceIPs:   s.ifaceIPs,
 		expiration: s.expiration,
 	}
