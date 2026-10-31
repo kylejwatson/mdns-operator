@@ -15,4 +15,4 @@ configMapGenerator:
 images:
   - name: ghcr.io/kylejwatson/mdns-operator
     newName: ghcr.io/kylejwatson/mdns-operator
-    newTag: sha-47eef20
+    newTag: sha-bb4acaf
