@@ -18,6 +18,7 @@ If the annotation is removed, the object is deleted, or there is no `IPAddress` 
 - `cmd/mdns-operator/main.go`: manager startup, health probes, leader election.
 - `internal/controller/gateway_watcher.go`: Gateway watch loop and object parsing.
 - `internal/mdns/publisher.go`: mDNS publish/unpublish lifecycle backed by `github.com/brutella/dnssd`.
+- `third_party/dnssd`: vendored `github.com/brutella/dnssd` with local patches, described in its `PATCHES.md`.
 - `config/default`: top-level kustomize entrypoint for installation.
 - `config/rbac`: ServiceAccount, ClusterRole, ClusterRoleBinding.
 - `config/manager`: controller Deployment.
@@ -56,6 +57,8 @@ kubectl apply -k config/default
 kubectl -n mdns-operator-system get deploy,pods
 kubectl -n mdns-operator-system logs deploy/mdns-operator-controller-manager -f
 ```
+
+The Deployment uses the `Recreate` strategy. With `hostNetwork: true`, the container ports are host ports and the responder binds UDP 5353, so the old pod has to stop before the new one can start. Expect a short gap in mDNS replies during each rollout. The old pod releases its leader lease on shutdown to keep the gap short, and clients keep using cached records until they expire.
 
 ## Example Gateway with mDNS annotation
 
@@ -102,12 +105,21 @@ The controller uses the first `status.addresses` entry with `type: IPAddress` an
 
 ## Verify published records
 
-After the Gateway controller assigns an IP to `status.addresses`, confirm the node answers direct hostname lookups on your LAN:
+After the Gateway controller assigns an IP to `status.addresses`, confirm the hostname is being announced on the same LAN. The operator publishes a service record and the matching host A/AAAA records, so the most reliable checks are:
 
 ```bash
-dns-sd -Q demo-home.local A
-dns-sd -Q demo-home.local AAAA
+dns-sd -G v4 demo-home.local
+dns-sd -G v6 demo-home.local
+dns-sd -B _http._tcp local
 ```
+
+If you want to resolve the service instance itself, query the instance by service type:
+
+```bash
+dns-sd -L demo-home _http._tcp local
+```
+
+> Note: `dns-sd -Q <name> A` is a generic DNS query and can return `No Such Record` even when the mDNS service is being announced, especially when the query is not being issued from the same link-local multicast domain or the name is not treated as a fully-qualified host name.
 
 ## Troubleshooting mDNS visibility
 
@@ -115,6 +127,12 @@ dns-sd -Q demo-home.local AAAA
 - The provided manager manifest enables `hostNetwork: true` so announcements are sent from the node network namespace.
 - If service browsing still shows no entries, verify your LAN/firewall allows multicast and that client and node are on the same L2 broadcast domain/VLAN.
 - The operator listens for mDNS traffic in the node network namespace and answers queries from the local multicast domain.
+
+### IPv4-mapped AAAA records
+
+The provided manifest sets `MDNS_MAPPED_AAAA=true`, which also publishes each IPv4 address as an IPv4-mapped AAAA record (for example `::ffff:192.168.69.51`), so `dns-sd -G v6` returns that address for an IPv4-only hostname.
+
+This works around clients that stall when a `.local` name has no AAAA record. An LG webOS TV's media player waited about 5 seconds per connection, even though the responder replied with an NSEC. Set the variable to `false` in `config/manager/manager.yaml` to publish only the real addresses.
 
 ### Enable responder debug logs
 

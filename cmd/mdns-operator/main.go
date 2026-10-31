@@ -40,6 +40,9 @@ func main() {
 		HealthProbeBindAddress: probeAddr,
 		LeaderElection:         enableLeaderElection,
 		LeaderElectionID:       "mdns-operator.kyle.github.io",
+		// Hand the lease over on shutdown. Safe because main exits as soon as
+		// mgr.Start returns.
+		LeaderElectionReleaseOnCancel: true,
 		Metrics: metricsserver.Options{
 			BindAddress: metricsAddr,
 		},

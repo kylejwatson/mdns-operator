@@ -10,9 +10,9 @@ generatorOptions:
 configMapGenerator:
   - name: mdns-operator-config
     literals:
-      - MDNS_RESPONDER_DEBUG=true
+      - MDNS_RESPONDER_DEBUG=false
 
 images:
   - name: ghcr.io/kylejwatson/mdns-operator
     newName: ghcr.io/kylejwatson/mdns-operator
-    newTag: sha-0fd8632
+    newTag: sha-47eef20

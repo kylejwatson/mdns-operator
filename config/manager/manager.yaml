@@ -7,6 +7,10 @@ metadata:
     app.kubernetes.io/component: controller
 spec:
   replicas: 1
+  # hostNetwork makes the container ports host ports, and the responder binds
+  # UDP 5353, so the old pod has to stop before the new one can start.
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: mdns-operator
